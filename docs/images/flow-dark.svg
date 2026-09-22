@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 730" width="1040" height="730" font-family="'Inter','Helvetica Neue',Helvetica,Arial,sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5d6b7d"/>
+    </marker>
+    <marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#25d366"/>
+    </marker>
+    <marker id="arb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#3d8bff"/>
+    </marker>
+    <filter id="g" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="3.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1040" height="730" fill="#0d1117"/>
+
+  <!-- ══ 1. callers ══ -->
+  <rect x="60"  y="34" width="164" height="52" rx="10" fill="#151d27" stroke="#2f3b4a" stroke-width="1.5"/>
+  <text x="142" y="65" font-size="15" fill="#c8d3e0" text-anchor="middle">Your system A</text>
+
+  <rect x="248" y="34" width="164" height="52" rx="10" fill="#151d27" stroke="#2f3b4a" stroke-width="1.5"/>
+  <text x="330" y="65" font-size="15" fill="#c8d3e0" text-anchor="middle">Your system B</text>
+
+  <rect x="436" y="34" width="164" height="52" rx="10" fill="#151d27" stroke="#2f3b4a" stroke-width="1.5"/>
+  <text x="518" y="65" font-size="15" fill="#c8d3e0" text-anchor="middle">Your system C</text>
+
+  
+
+  <!-- callers -> API -->
+  <path d="M142 86 V112" stroke="#2f3b4a" stroke-width="1.5" fill="none"/>
+  <path d="M330 86 V112" stroke="#2f3b4a" stroke-width="1.5" fill="none"/>
+  <path d="M518 86 V112" stroke="#2f3b4a" stroke-width="1.5" fill="none"/>
+  <path d="M142 112 H518" stroke="#2f3b4a" stroke-width="1.5" fill="none"/>
+  <path d="M330 112 V146" stroke="#2f3b4a" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+  <text x="344" y="134" font-size="12.5" fill="#5d6b7d">one token each</text>
+
+  <!-- ══ 2. API ══ -->
+  <rect x="180" y="150" width="300" height="64" rx="11" fill="#141c2b" stroke="#3d8bff" stroke-width="1.8"/>
+  <text x="330" y="178" font-size="16.5" font-weight="600" fill="#e9eef5" text-anchor="middle">HTTP API</text>
+  <text x="330" y="199" font-size="12.5" fill="#7d8fa6" text-anchor="middle">auth · validation · rate limit</text>
+
+  <!-- immediate response, to the right -->
+  <path d="M480 182 H596" stroke="#3d8bff" stroke-width="1.7" fill="none"
+        stroke-dasharray="6 5" marker-end="url(#arb)"/>
+  <rect x="604" y="150" width="212" height="66" rx="10" fill="#111a2a" stroke="#2a3c58" stroke-width="1.3"/>
+  <text x="710" y="175" font-size="13.5" font-weight="600" fill="#6fa8ff" text-anchor="middle">202 Accepted</text>
+  <text x="710" y="195" font-size="11.5" fill="#6b7d94" text-anchor="middle">caller is released here —</text>
+  <text x="710" y="209" font-size="11.5" fill="#6b7d94" text-anchor="middle">before WhatsApp is touched</text>
+
+  <path d="M330 214 V250" stroke="#2f3b4a" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+
+  <!-- ══ 3. queue ══ -->
+  <rect x="180" y="254" width="300" height="64" rx="11" fill="#141c2b" stroke="#3d8bff" stroke-width="1.8"/>
+  <g>
+    <rect x="206" y="273" width="7" height="26" rx="2.5" fill="#3d8bff"/>
+    <rect x="218" y="273" width="7" height="26" rx="2.5" fill="#3d8bff" opacity="0.62"/>
+    <rect x="230" y="273" width="7" height="26" rx="2.5" fill="#3d8bff" opacity="0.32"/>
+  </g>
+  <text x="350" y="282" font-size="16.5" font-weight="600" fill="#e9eef5" text-anchor="middle">Queue</text>
+  <text x="350" y="303" font-size="12.5" fill="#7d8fa6" text-anchor="middle">retry · backoff · priority</text>
+
+  <path d="M330 318 V354" stroke="#2f3b4a" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+
+  <!-- ══ 4. worker ══ -->
+  <rect x="180" y="358" width="300" height="64" rx="11" fill="#15221b" stroke="#25d366" stroke-width="1.8"/>
+  <text x="330" y="386" font-size="16.5" font-weight="600" fill="#e9eef5" text-anchor="middle">Worker</text>
+  <text x="330" y="407" font-size="12.5" fill="#7d8fa6" text-anchor="middle">rotation · jitter · warmup · caps</text>
+
+  <!-- worker -> channel bus -->
+  <path d="M330 422 V452" stroke="#25d366" stroke-width="1.6" fill="none" opacity="0.7"/>
+  <path d="M110 452 H550" stroke="#25d366" stroke-width="1.6" fill="none" opacity="0.7"/>
+  <path d="M110 452 V494" stroke="#25d366" stroke-width="1.6" fill="none" opacity="0.7" marker-end="url(#arg)"/>
+  <path d="M256 452 V494" stroke="#25d366" stroke-width="1.6" fill="none" opacity="0.7" marker-end="url(#arg)"/>
+  <path d="M402 452 V494" stroke="#25d366" stroke-width="1.6" fill="none" opacity="0.7" marker-end="url(#arg)"/>
+  <path d="M550 452 V494" stroke="#3a4453" stroke-width="1.5" fill="none" stroke-dasharray="5 5"/>
+
+  <!-- ══ 5. channels ══ -->
+  <rect x="48"  y="498" width="124" height="54" rx="10" fill="#15221b" stroke="#25d366" stroke-width="1.6"/>
+  <circle cx="72" cy="525" r="5.5" fill="#25d366" filter="url(#g)"/>
+  <text x="90" y="530" font-size="13.5" fill="#c8d3e0">Channel 1</text>
+
+  <rect x="194" y="498" width="124" height="54" rx="10" fill="#15221b" stroke="#25d366" stroke-width="1.6"/>
+  <circle cx="218" cy="525" r="5.5" fill="#25d366" filter="url(#g)"/>
+  <text x="236" y="530" font-size="13.5" fill="#c8d3e0">Channel 2</text>
+
+  <rect x="340" y="498" width="124" height="54" rx="10" fill="#15221b" stroke="#25d366" stroke-width="1.6"/>
+  <circle cx="364" cy="525" r="5.5" fill="#25d366" filter="url(#g)"/>
+  <text x="382" y="530" font-size="13.5" fill="#c8d3e0">Channel 3</text>
+
+  <g opacity="0.45">
+    <rect x="488" y="498" width="124" height="54" rx="10" fill="#171a1f" stroke="#4a5462" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <circle cx="512" cy="525" r="5.5" fill="none" stroke="#6b7684" stroke-width="1.6"/>
+    <text x="530" y="530" font-size="13.5" fill="#8b98a9">Channel 4</text>
+  </g>
+
+  <!-- failover: leaves the banned channel to the RIGHT, loops back above it -->
+  <path d="M612 516 C672 516 690 470 640 452 L410 452"
+        stroke="#25d366" stroke-width="2" fill="none" stroke-dasharray="7 5"
+        marker-end="url(#arg)" filter="url(#g)"/>
+  <text x="640" y="556" font-size="12.5" font-weight="600" fill="#25d366">banned → re-queued</text>
+  <text x="640" y="574" font-size="12.5" fill="#7d8fa6">on a healthy channel</text>
+
+  <!-- ══ 6. recipients ══ -->
+  <path d="M110 552 V606" stroke="#2f3b4a" stroke-width="1.4" fill="none"/>
+  <path d="M256 552 V606" stroke="#2f3b4a" stroke-width="1.4" fill="none"/>
+  <path d="M402 552 V606" stroke="#2f3b4a" stroke-width="1.4" fill="none"/>
+  <path d="M110 606 H402" stroke="#2f3b4a" stroke-width="1.4" fill="none"/>
+  <path d="M256 606 V640" stroke="#2f3b4a" stroke-width="1.5" fill="none" marker-end="url(#ar)"/>
+
+  <rect x="162" y="644" width="188" height="50" rx="10" fill="#151d27" stroke="#2f3b4a" stroke-width="1.5"/>
+  <text x="256" y="674" font-size="14.5" fill="#c8d3e0" text-anchor="middle">Recipients</text>
+
+  <!-- ══ 7. inbound: recipients -> webhook -> your systems ══ -->
+  <path d="M350 669 H432" stroke="#5d6b7d" stroke-width="1.5" fill="none"
+        stroke-dasharray="5 5" marker-end="url(#ar)"/>
+  <rect x="440" y="645" width="150" height="48" rx="10" fill="#151d27" stroke="#3f4b5c" stroke-width="1.4"/>
+  <text x="515" y="674" font-size="13.5" fill="#a9b6c6" text-anchor="middle">Webhook</text>
+
+  <!-- webhook climbs the right margin back to the callers -->
+  <path d="M590 669 H900 V52 H608" stroke="#5d6b7d" stroke-width="1.5" fill="none"
+        stroke-dasharray="5 5" marker-end="url(#ar)"/>
+  <text x="916" y="370" font-size="12.5" fill="#6b7684" transform="rotate(-90 916 370)" text-anchor="middle">replies &amp; delivery status</text>
+</svg>

@@ -48,6 +48,23 @@ an inconvenience, not an outage.
 
 ## How it works
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/flow-dark.png">
+  <img src="docs/images/flow-light.png" alt="Request flow: your systems call the HTTP API, which returns 202 Accepted immediately and queues the message; the worker picks it up, rotates across healthy channels, and re-queues elsewhere when one is banned; replies and delivery status come back through a webhook" width="100%">
+</picture>
+
+Sending is **asynchronous by design**. The HTTP call returns as soon as the
+message is queued, not when WhatsApp delivers it. That keeps WhatsApp Web's
+latency and flakiness out of your callers' response times, and it's what makes
+retrying on a different channel possible without the caller ever knowing.
+
+Two consequences worth noticing in the diagram: the caller is released at the
+API, before WhatsApp is involved at all; and a banned channel doesn't lose the
+message — it goes back to the queue and leaves on a healthy one.
+
+<details>
+<summary>Same flow as text</summary>
+
 ```
 ┌──────────┐  ┌──────────┐  ┌──────────┐
 │ System A │  │ System B │  │ System C │
@@ -57,27 +74,24 @@ an inconvenience, not an outage.
                    ▼
        ┌───────────────────────┐
        │   HTTP API (Fastify)  │  auth, validation, rate limit
-       └───────────┬───────────┘
+       └───────────┬───────────┘   └─▶ 202 Accepted, at once
                    ▼
        ┌───────────────────────┐
        │  Queue (BullMQ/Redis) │  retry, backoff, priority
        └───────────┬───────────┘
                    ▼
        ┌───────────────────────┐
-       │   Worker (Baileys)    │  channel rotation + pacing
+       │   Worker (Baileys)    │  rotation, jitter, warmup, caps
        └───────────┬───────────┘
       ┌────────┬───┴────┬────────┐
-      ▼        ▼        ▼        ▼
-  Channel 1 Channel 2 Channel 3 Channel N
+      ▼        ▼        ▼        ╳ banned → re-queued elsewhere
+  Channel 1 Channel 2 Channel 3  Channel 4
       └────────┴────────┴────────┘
                    ▼
-              Recipients
+              Recipients ──▶ Webhook ──▶ back to your systems
 ```
 
-Sending is **asynchronous by design**. The HTTP call returns as soon as the
-message is queued, not when WhatsApp delivers it. That keeps WhatsApp Web's
-latency and flakiness out of your callers' response times, and it's what makes
-retrying on a different channel possible without the caller ever knowing.
+</details>
 
 ---
 
