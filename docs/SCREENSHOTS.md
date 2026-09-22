@@ -1,66 +1,65 @@
 # Screenshots
 
-Suggested shots for the README, in priority order. Save them to
-`docs/images/` and uncomment the matching `<!-- SCREENSHOT: ... -->` markers.
+The images in `docs/images/` were captured from a local instance seeded with
+fictitious data. This file explains how to regenerate them.
 
-**Before you capture anything:** switch the panel to English, and make sure
-every phone number, contact name and message body on screen is fake. Screenshots
-are the easiest way to leak real recipient data into a public repo.
+Every phone number, contact and message body comes from
+[`packages/database/prisma/seed-demo.ts`](../packages/database/prisma/seed-demo.ts)
+and is fake. **Never capture screenshots from an instance holding real recipient
+data** — a screenshot is the easiest way to leak it into a public repo.
 
-Seed a few plausible-looking messages first — an empty dashboard sells nothing.
+## Regenerating
 
----
+```bash
+# 1. Infra + schema
+pnpm infra:up
+pnpm db:deploy
 
-## 1. Dashboard — the hero shot
+# 2. Demo data: 4 channels (connected / warmup / banned), 3 projects,
+#    ~110 messages, opt-outs and 14 days of daily stats
+pnpm --filter @wpp/database exec tsx prisma/seed-demo.ts
 
-Goes at the top of the README. It should show, at a glance, that this is a real
-operating system and not a demo: usage numbers, several channels, recent
-activity.
+# 3. Panel
+pnpm --filter @wpp/panel dev
+```
 
-Wide crop, full width.
+Then set the panel language to English and capture at 1440px wide.
 
-## 2. Channels list
+Two things the seed depends on:
 
-The feature that justifies the whole project. Ideally showing:
+- **`TENANT_TIMEZONE`** decides what counts as "today". The seed anchors its
+  messages to 06:00 in that timezone, so the dashboard's daily cards are only
+  populated if the tenant's local clock is past mid-morning. Capturing outside
+  those hours produces an almost-empty dashboard — which is correct behaviour,
+  just a poor screenshot.
+- **The worker** must be running (`pnpm --filter @wpp/worker dev`) for the Queue
+  screen to render; it reads live queue state over the worker's internal API
+  rather than from the database.
 
-- three or more channels
-- mixed states — one connected, one in warmup, one disconnected
+## The shots
 
-That single frame tells the rotation-and-failover story better than a paragraph.
+| File | Screen | Why it's worth showing |
+|---|---|---|
+| `dashboard.png` | Dashboard | Pool status, per-channel volume against each cap, failures by reason |
+| `channels.png` | Channels | The whole story in one frame: healthy channels, one in warmup, one banned |
+| `channel-detail.png` | Channel detail | Event timeline with `statusCode: 401` — ban vs. transient disconnect |
+| `messages.png` | Messages | Delivery status, direction, per-project attribution, a real error |
+| `opt-out.png` | Opt-out | Suppression list, with the contact who replied STOP |
+| `projects.png` | Projects | Per-project tokens, quotas and rate limits |
+| `alerts.png` | Alerts | Where channel-down notifications go |
 
-## 3. QR pairing
+Not included:
 
-From **Channels → New**. The most recognizable screen in the repo — anyone
-who has used WhatsApp Web knows instantly what they're looking at.
+- **QR pairing** — the QR only renders on step 2 of the wizard, which requires
+  pairing a real WhatsApp number. Not worth doing for a screenshot.
+- **Queue** — with no jobs actually in flight it renders all zeros, which says
+  nothing. Capture it while a batch is being processed if you want it.
 
-Blur or crop the QR itself. A live pairing code is a credential.
-
-## 4. Message history
-
-Shows delivery status tracking and which channel sent what. Use obviously fake
-recipients (`+55 11 99999-8888`) and transactional content — an OTP, a sign-up
-confirmation.
-
-## 5. Queue
-
-Pending, failed and retrying. Worth including if you can capture a state that
-shows a retry, since that's the failover behavior made visible.
-
-## 6. Project tokens
-
-Per-project quota and rate limit. **Mask the token values.** Even a revoked
-token in a screenshot is a bad habit to publish.
-
----
-
-## Adding them to the README
+## Adding one to the README
 
 ```markdown
 ![Dashboard](docs/images/dashboard.png)
 ```
 
-Keep each image under ~300 KB — GitHub serves them inline and large PNGs make
-the page crawl. `pngquant` or a quick export at 1600px wide is plenty.
-
-For the LinkedIn post itself, the dashboard and the channels list are the two
-that carry best at thumbnail size.
+Keep each image under ~300 KB. `sips -Z 1440 in.png --out out.png` on macOS is
+usually enough; `pngquant` compresses further if you have it.

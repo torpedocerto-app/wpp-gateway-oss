@@ -12,7 +12,9 @@ Built because I needed my systems to notify me on a channel I actually check.
 > — OTPs, sign-up confirmations, system alerts, status updates. This is not a
 > bulk marketing tool. See [Responsible use](#responsible-use).
 
-<!-- SCREENSHOT: dashboard — see docs/SCREENSHOTS.md -->
+![Dashboard](docs/images/dashboard.png)
+
+*Dashboard: pool status, volume per channel against each one's daily cap, failures by reason, and the latest inbound replies.*
 
 ---
 
@@ -184,11 +186,6 @@ A live API reference is served at `/docs/api` on every deploy.
 
 ## Admin panel
 
-<!-- SCREENSHOT: channels list — connected / warmup / disconnected -->
-<!-- SCREENSHOT: QR pairing -->
-<!-- SCREENSHOT: message history -->
-<!-- SCREENSHOT: queue -->
-
 Available in English, Portuguese and Spanish:
 
 - **Channels** — pair accounts by QR code, monitor status, warmup progress
@@ -199,6 +196,42 @@ Available in English, Portuguese and Spanish:
 - **Opt-out** — manage blocked contacts
 - **Alerts** — configure where channel-down notifications go
 - **Users** — panel access with mandatory 2FA
+
+### Channels
+
+![Channels](docs/images/channels.png)
+
+The pool at a glance: two healthy channels, one still in warmup on reduced
+limits, and one banned. Per-channel delivery rate and hourly/daily counters make
+it obvious which channel is carrying traffic and which is being held back.
+
+### Messages
+
+![Messages](docs/images/messages.png)
+
+Every message, inbound and outbound, with its status, the project that sent it
+and the error when one failed.
+
+### Channel detail
+
+![Channel detail](docs/images/channel-detail.png)
+
+The event timeline for a channel that went down. `Ban detected {"statusCode":401}`
+is the distinction that matters: a 401 is a real ban and the channel is retired,
+while a transient stream error would simply reconnect.
+
+### Opt-out
+
+![Opt-out](docs/images/opt-out.png)
+
+A contact who replied STOP is blocked tenant-wide, not merely logged — the
+suppression is enforced on every subsequent send.
+
+### Projects
+
+![Projects](docs/images/projects.png)
+
+Each consuming system gets its own token, quota and rate limit.
 
 ---
 
