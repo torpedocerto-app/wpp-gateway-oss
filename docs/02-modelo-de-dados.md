@@ -287,18 +287,33 @@ Recuperação de senha e convite. Guarda só o sha256 (`token_hash`), nunca o va
 
 | Dado | Retenção | Mecanismo |
 |---|---|---|
-| `messages` (com `content`) | 90 dias | `DROP PARTITION` mensal |
-| `message_attempts` | 90 dias | Cascade da partição |
+| `messages` (com `content`) | `RETENTION_DAYS` (90) | `DROP PARTITION` mensal |
+| `message_attempts` | Junto da mensagem | Delete de órfãs após o drop |
 | `daily_stats` | Indefinido | Agregado, sem dado pessoal |
 | `account_events` | 1 ano | Delete por data |
 | `webhook_deliveries` | 30 dias | Delete por data |
 
-**Job noturno (03:00):**
-1. Agrega o dia anterior em `daily_stats`
-2. Descarta partições de `messages` com mais de 90 dias
-3. Limpa `webhook_deliveries` e `account_events` vencidos
-4. Cria a partição do próximo mês (com antecedência)
+**Implementado** em `apps/worker/src/retention/` — agendado pelo próprio worker
+(instância única, ADR-002), às 03:00 no fuso do tenant, dentro da janela de
+silêncio. Execução manual: `pnpm worker retention:run`.
+
+**Ordem do job:**
+1. **Cria partições** do mês corrente + 2 à frente (passo crítico, roda primeiro)
+2. Descarta partições de `messages` inteiramente fora da janela
+3. Apaga `message_attempts` órfãs, se algo foi descartado
+4. Limpa `account_events` (> 1 ano) e `webhook_deliveries` (> 30 dias)
 
 > ⚠️ A criação antecipada de partições é crítica: se a partição do mês seguinte não
-> existir, **todo INSERT em `messages` falha** na virada do mês. O job deve criar
-> partições com 2 meses de antecedência e emitir alerta se falhar.
+> existir, **todo INSERT em `messages` falha** na virada do mês. Por isso é o passo
+> 1 e, se falhar, dispara `RETENTION_FAILED` (CRITICAL, com escalation) e aborta o
+> resto do ciclo. O worker também executa uma passada no boot, para corrigir na
+> hora um deploy que suba num mês sem partição.
+
+> **`message_attempts` não sai por cascade.** A FK dela aponta para `accounts`,
+> não para `messages` — dropar a partição deixaria as tentativas órfãs para
+> sempre. O passo 3 existe por isso, e só varre quando houve descarte.
+
+**Granularidade do descarte:** como a partição é mensal, ela só cai quando o mês
+INTEIRO está fora da janela. Com 90 dias, uma mensagem vive entre 90 e ~120 dias.
+O arredondamento é deliberadamente para o lado conservador — nunca apaga antes
+do contratado.

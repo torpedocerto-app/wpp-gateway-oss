@@ -18,6 +18,7 @@ import {
   listSettings,
 } from '@wpp/database';
 import { logger } from './logger.js';
+import { runRetention } from './retention/index.js';
 import { Session, SessionManager, sendText, diagnoseSend } from './sessions/index.js';
 import { sessionDir } from './sessions/paths.js';
 import { createAndEnqueue, outboundQueue, closeQueues } from './queue/index.js';
@@ -214,6 +215,19 @@ async function cmdSettings(sub: string, key: string, value: string): Promise<voi
   process.exitCode = 1;
 }
 
+/**
+ * Executa a retenção manualmente (doc 02 §3). Útil para validar depois de um
+ * deploy ou para forçar a criação de partições sem esperar as 03:00.
+ */
+async function cmdRetentionRun(): Promise<void> {
+  const r = await runRetention();
+  console.log(`  partições criadas:    ${r.partitionsCreated.join(', ') || '(nenhuma)'}`);
+  console.log(`  partições descartadas: ${r.partitionsDropped.join(', ') || '(nenhuma)'}`);
+  console.log(`  tentativas órfãs apagadas:    ${r.orphanAttemptsDeleted}`);
+  console.log(`  account_events apagados:      ${r.accountEventsDeleted}`);
+  console.log(`  webhook_deliveries apagados:  ${r.webhookDeliveriesDeleted}`);
+}
+
 async function main(): Promise<void> {
   const [cmd, ...args] = process.argv.slice(2);
   switch (cmd) {
@@ -238,6 +252,9 @@ async function main(): Promise<void> {
     case 'list':
       await cmdList();
       break;
+    case 'retention:run':
+      await cmdRetentionRun();
+      break;
     case 'logout':
       await cmdLogout(args[0] ?? '');
       break;
@@ -245,7 +262,7 @@ async function main(): Promise<void> {
       console.log(
         'comandos: pair <label> | send <accountId> <num> <texto> | enqueue <num> <texto> | ' +
           'diagnose <accountId> <num> <texto> | queue:status | settings <list|get|set|unset> | ' +
-          'list | logout <accountId>',
+          'list | logout <accountId> | retention:run',
       );
       process.exitCode = 1;
   }

@@ -15,6 +15,7 @@ import { SessionManager } from './sessions/index.js';
 import { startOutboundWorker, startWebhookWorker, closeQueues } from './queue/index.js';
 import { AlertService, PoolMonitor } from './alerts/index.js';
 import { startInternalApi } from './internal-api/server.js';
+import { RetentionScheduler } from './retention/index.js';
 import { redis } from './redis.js';
 
 const env = loadEnv();
@@ -52,12 +53,17 @@ async function main(): Promise<void> {
 
   const internalApi = await startInternalApi(manager);
 
+  // Retenção de dados + criação antecipada de partições (doc 02 §3).
+  const retention = new RetentionScheduler(alerts);
+  retention.start();
+
   logger.info('worker pronto');
 
   const shutdown = (signal: string) => {
     logger.info({ signal }, 'encerrando worker');
     void (async () => {
       poolMonitor.stop();
+      retention.stop();
       await internalApi?.close();
       await outboundWorker.close();
       await webhookWorker.close();

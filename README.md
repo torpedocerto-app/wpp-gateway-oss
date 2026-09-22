@@ -117,6 +117,7 @@ retrying on a different channel possible without the caller ever knowing.
 | **Multi-tenant** | Fully isolated deploys on one host, routed by domain |
 | **i18n** | Panel available in English, Portuguese and Spanish |
 | **Per-tenant timezone** | Quiet hours, daily caps and dashboard "today" follow the tenant's timezone, not the server's |
+| **Data retention** | Message history is dropped after `RETENTION_DAYS` (default 90) by a nightly job — partition drops rather than row deletes, so it's instant and reclaims disk |
 
 ---
 
@@ -350,10 +351,9 @@ If you deploy it, it is on you to:
   you by another channel.
 - **Tell people how you'll reach them,** in whatever privacy notice covers the
   service they signed up for.
-- **Keep what you collect to what you need.** Note that automatic deletion is
-  **not implemented yet** — `RETENTION_DAYS` (default 90) is read and validated,
-  but no job acts on it, so message history accumulates until you prune it
-  yourself. The intended policy is in
+- **Keep what you collect to what you need.** Message history is deleted
+  automatically after `RETENTION_DAYS` (default 90); set it to whatever your
+  retention policy actually is. Details in
   [`docs/02-modelo-de-dados.md`](docs/02-modelo-de-dados.md) §3.
 - **Comply with the local rules** wherever your recipients are — messaging,
   consent and marketing law vary by country, and the recipient's country is the

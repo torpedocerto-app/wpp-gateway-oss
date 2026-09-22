@@ -19,6 +19,7 @@ export const AlertType = {
   POOL_EMPTY: 'POOL_EMPTY', // 0 contas ativas
   QUEUE_BACKED_UP: 'QUEUE_BACKED_UP', // > 500 jobs
   WEBHOOK_FAILING: 'WEBHOOK_FAILING', // falhando há > 1h
+  RETENTION_FAILED: 'RETENTION_FAILED', // job de retenção falhou (doc 02 §3)
 } as const;
 export type AlertType = (typeof AlertType)[keyof typeof AlertType];
 
@@ -86,6 +87,16 @@ export const ALERT_RULES: Record<AlertType, AlertRule> = {
     severity: AlertSeverity.MEDIUM,
     channels: [AlertChannel.PANEL, AlertChannel.EMAIL],
     dedupWindowMs: 60 * 60_000,
+  },
+  RETENTION_FAILED: {
+    // Crítico porque a falha mais grave deste job é não criar a partição do mês
+    // seguinte: sem ela, TODO INSERT em `messages` falha na virada do mês e o
+    // gateway para de aceitar envios. Escala até alguém resolver.
+    severity: AlertSeverity.CRITICAL,
+    channels: [AlertChannel.WHATSAPP, AlertChannel.EMAIL, AlertChannel.PANEL],
+    dedupWindowMs: 6 * 60 * 60_000, // 6h — o job roda 1x/dia
+    escalate: true,
+    escalateIntervalMs: 6 * 60 * 60_000,
   },
 };
 
