@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or "does this fit my case?"
+    url: https://github.com/torpedocerto-app/wpp-gateway-oss/discussions
+    about: Usage questions are better as a discussion than an issue.
+  - name: Security vulnerability
+    url: https://github.com/torpedocerto-app/wpp-gateway-oss/security/advisories/new
+    about: Report privately — please don't open a public issue.

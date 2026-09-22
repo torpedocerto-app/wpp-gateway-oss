@@ -425,6 +425,22 @@ The project was designed before it was written. The documents in
 
 ---
 
+## Using it, and contributing
+
+**No permission needed, and no fork required.** MIT: clone it, run it, change
+it, deploy it, build something commercial on it. Keeping the copyright notice
+in LICENSE is the entire obligation. Fork only if you want your changes on your
+GitHub account or plan to send a pull request.
+
+**Issues are open** for bugs and feature requests — please redact phone numbers
+and message contents, it's a public tracker. Usage questions fit better as a
+[discussion](../../discussions). Security problems go through private reporting,
+not a public issue: see [SECURITY.md](SECURITY.md).
+
+Details, including how to run the test suite before a PR, are in
+[CONTRIBUTING.md](CONTRIBUTING.md). Fair warning: this is a side project, so
+reviews come when they come.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,48 @@
+name: Bug report
+description: Something behaves differently than documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you paste logs:** redact phone numbers and message contents.
+        This is a public issue tracker and real recipient data doesn't belong here.
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. POST /v1/messages with …
+        2. Worker picks it up
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: "`docker compose logs worker` — redacted."
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+    validations:
+      required: true
+  - type: dropdown
+    id: setup
+    attributes:
+      label: How are you running it?
+      options:
+        - Local (pnpm dev)
+        - Docker Compose, single host
+        - Multi-tenant on AWS
+        - Other
+    validations:
+      required: true

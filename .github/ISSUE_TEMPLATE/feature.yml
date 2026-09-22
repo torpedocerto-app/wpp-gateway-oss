@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest something the project should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Requests that make bulk or unsolicited messaging easier will be
+        declined — see *Responsible use* in the README. Everything else is
+        fair game.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you hitting?
+      description: The situation, not the solution you have in mind.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like it to do?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How are you working around it today?

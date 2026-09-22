@@ -1,0 +1,71 @@
+# CI — lint, typecheck e testes. Roda em push e em PR.
+#
+# Não implanta nada: o pipeline de deploy é específico da infra de cada um e
+# está publicado como referência em .github/deploy.example.yml.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: wpp
+          POSTGRES_USER: wpp
+          POSTGRES_PASSWORD: wpp
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U wpp -d wpp"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://wpp:wpp@localhost:5432/wpp
+      REDIS_URL: redis://localhost:6379
+      ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      SESSION_SECRET: '1111111111111111111111111111111111111111111111111111111111111111'
+      PANEL_SESSION_SECRET: '2222222222222222222222222222222222222222222222222222222222222222'
+      INTERNAL_API_TOKEN: '3333333333333333333333333333333333333333333333333333333333333333'
+      ALERT_WHATSAPP_NUMBER: '5511999998888'
+      ALERT_EMAIL: admin@example.com
+      SESSIONS_PATH: ./data/sessions
+      TENANT_TIMEZONE: America/Sao_Paulo
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @wpp/database exec prisma migrate deploy
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      - run: pnpm test:all

@@ -1,4 +1,9 @@
-# CI/CD — build ARM64 → push ECR → deploy na EC2 via SSM.
+# EXEMPLO de CI/CD — build ARM64 → push ECR → deploy na EC2 via SSM.
+#
+# Este arquivo NÃO roda: vive em .github/ em vez de .github/workflows/, de
+# propósito. É a referência real usada em produção, publicada para quem quiser
+# o mesmo pipeline. Para adotá-lo: copie para .github/workflows/deploy.yml,
+# crie o role OIDC (docs/09-infraestrutura.md) e defina as vars abaixo.
 #
 # Autenticação AWS: OIDC (sem chaves de acesso). O role só confia neste repo.
 # Segredos/vars necessários no repo (Settings → Secrets and variables → Actions):
