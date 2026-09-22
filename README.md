@@ -1,3 +1,5 @@
+<img src="docs/images/cover.png" alt="wpp-gateway — self-hosted WhatsApp notifications with multi-channel rotation, queueing and automatic failover" width="100%">
+
 # wpp-gateway
 
 A self-hosted WhatsApp notification gateway. One HTTP API that any number of
@@ -10,7 +12,7 @@ Built because I needed my systems to notify me on a channel I actually check.
 > — OTPs, sign-up confirmations, system alerts, status updates. This is not a
 > bulk marketing tool. See [Responsible use](#responsible-use).
 
-<!-- SCREENSHOT: dashboard — see docs/SCREENSHOTS.md for the suggested shots -->
+<!-- SCREENSHOT: dashboard — see docs/SCREENSHOTS.md -->
 
 ---
 

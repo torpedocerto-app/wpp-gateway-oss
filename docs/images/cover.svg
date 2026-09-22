@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 628" width="1200" height="628" font-family="'Inter','Helvetica Neue',Helvetica,Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#11171f"/>
+    </linearGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="11" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="628" fill="url(#bg)"/>
+
+  <!-- ── left: title ─────────────────────────────────────────────── -->
+  <text x="86" y="212" font-size="53" font-weight="700" fill="#e9eef5" letter-spacing="-1.2">Self-hosted</text>
+  <text x="86" y="273" font-size="53" font-weight="700" fill="#e9eef5" letter-spacing="-1.2">WhatsApp</text>
+  <text x="86" y="334" font-size="53" font-weight="700" fill="#25d366" letter-spacing="-1.2">notifications</text>
+
+  <rect x="88" y="374" width="52" height="3" rx="1.5" fill="#25d366" opacity="0.85"/>
+
+  <text x="86" y="424" font-size="20" fill="#8b98a9" letter-spacing="-0.2">Multi-channel rotation, queueing</text>
+  <text x="86" y="454" font-size="20" fill="#8b98a9" letter-spacing="-0.2">and automatic failover.</text>
+
+  <text x="86" y="516" font-size="15.5" fill="#5d6b7d" letter-spacing="0.3">TypeScript · Fastify · BullMQ · Prisma · Next.js</text>
+
+  <!-- ── right: diagram ──────────────────────────────────────────── -->
+  <g transform="translate(706,0)">
+
+    <!-- column captions -->
+    <text x="14" y="150" font-size="12.5" fill="#5d6b7d" letter-spacing="1.6">API</text>
+    <text x="138" y="150" font-size="12.5" fill="#5d6b7d" letter-spacing="1.6">QUEUE</text>
+    <text x="286" y="150" font-size="12.5" fill="#5d6b7d" letter-spacing="1.6">CHANNELS</text>
+
+    <!-- api -> queue -->
+    <path d="M60 314 H150" stroke="#2f3b4a" stroke-width="1.6" fill="none"/>
+
+    <!-- queue -> channels (healthy) -->
+    <path d="M214 314 C258 314 258 208 306 208" stroke="#25d366" stroke-width="1.8" fill="none" opacity="0.62"/>
+    <path d="M214 314 H306" stroke="#25d366" stroke-width="1.8" fill="none" opacity="0.62"/>
+    <path d="M214 314 C258 314 258 420 306 420" stroke="#25d366" stroke-width="1.8" fill="none" opacity="0.62"/>
+
+    <!-- queue -> banned channel: severed -->
+    <path d="M214 314 C252 314 252 526 290 526" stroke="#3a4453" stroke-width="1.6" fill="none" stroke-dasharray="5 6"/>
+
+    <!-- reroute: banned -> healthy -->
+    <path d="M290 526 C248 526 248 420 306 420" stroke="#25d366" stroke-width="2.1" fill="none"
+          stroke-dasharray="7 6" opacity="0.95" filter="url(#glow)"/>
+
+    <!-- api node -->
+    <circle cx="42" cy="314" r="16" fill="none" stroke="#3d8bff" stroke-width="2"/>
+    <circle cx="42" cy="314" r="5.5" fill="#3d8bff" filter="url(#glow)"/>
+
+    <!-- queue node -->
+    <rect x="150" y="288" width="64" height="52" rx="9" fill="#151d27" stroke="#3d8bff" stroke-width="1.7"/>
+    <rect x="163" y="302" width="6" height="24" rx="2" fill="#3d8bff" opacity="0.95"/>
+    <rect x="176" y="302" width="6" height="24" rx="2" fill="#3d8bff" opacity="0.62"/>
+    <rect x="189" y="302" width="6" height="24" rx="2" fill="#3d8bff" opacity="0.32"/>
+
+    <!-- healthy channels -->
+    <g>
+      <rect x="306" y="184" width="138" height="48" rx="11" fill="#15221b" stroke="#25d366" stroke-width="1.7"/>
+      <circle cx="332" cy="208" r="6.5" fill="#25d366" filter="url(#glow)"/>
+      <rect x="350" y="200" width="72" height="5" rx="2.5" fill="#25d366" opacity="0.5"/>
+      <rect x="350" y="212" width="46" height="5" rx="2.5" fill="#25d366" opacity="0.26"/>
+    </g>
+    <g>
+      <rect x="306" y="290" width="138" height="48" rx="11" fill="#15221b" stroke="#25d366" stroke-width="1.7"/>
+      <circle cx="332" cy="314" r="6.5" fill="#25d366" filter="url(#glow)"/>
+      <rect x="350" y="306" width="72" height="5" rx="2.5" fill="#25d366" opacity="0.5"/>
+      <rect x="350" y="318" width="46" height="5" rx="2.5" fill="#25d366" opacity="0.26"/>
+    </g>
+    <g>
+      <rect x="306" y="396" width="138" height="48" rx="11" fill="#15221b" stroke="#25d366" stroke-width="1.7"/>
+      <circle cx="332" cy="420" r="6.5" fill="#25d366" filter="url(#glow)"/>
+      <rect x="350" y="412" width="72" height="5" rx="2.5" fill="#25d366" opacity="0.5"/>
+      <rect x="350" y="424" width="46" height="5" rx="2.5" fill="#25d366" opacity="0.26"/>
+    </g>
+
+    <!-- banned channel -->
+    <g opacity="0.5">
+      <rect x="290" y="502" width="138" height="48" rx="11" fill="#171a1f" stroke="#4a5462" stroke-width="1.6"
+            stroke-dasharray="6 5"/>
+      <circle cx="316" cy="526" r="6.5" fill="none" stroke="#6b7684" stroke-width="1.7"/>
+      <rect x="334" y="518" width="72" height="5" rx="2.5" fill="#6b7684" opacity="0.4"/>
+      <rect x="334" y="530" width="46" height="5" rx="2.5" fill="#6b7684" opacity="0.22"/>
+    </g>
+
+    <!-- callout -->
+    <text x="290" y="584" font-size="13.5" fill="#6b7684" letter-spacing="0.2">one drops · traffic reroutes</text>
+  </g>
+</svg>
