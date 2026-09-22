@@ -35,5 +35,7 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // robots.txt fica de fora: interceptado pelo middleware ele redirecionava
+  // para /login, e o crawler nunca via a diretiva de bloqueio.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)'],
 };
