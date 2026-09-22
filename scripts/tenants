@@ -1,0 +1,8 @@
+# Tenants deste servidor. Um por linha:  <nome>  <dominio>
+# - <nome>: slug curto [a-z0-9-], vira o project name (wpp-<nome>), o prefixo
+#   dos volumes/rede e o namespace no SSM (/wpp-gateway/<nome>/*).
+# - <dominio>: FQDN público, roteado pelo Caddy para o painel/API do tenant.
+# Linhas em branco e '#' são ignoradas.
+
+acme      wpp.acme-example.com
+nova      wpp.nova-example.com

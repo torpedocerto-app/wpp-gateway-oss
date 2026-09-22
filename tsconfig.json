@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "types": ["node"]
+  },
+  "include": [
+    "eslint.config.js",
+    "vitest.config.ts",
+    "vitest.setup.ts",
+    "packages/*/vitest.config.ts",
+    "packages/*/prisma.config.ts",
+    "packages/*/prisma/seed.ts",
+    "apps/*/vitest.config.ts",
+    "apps/*/vitest.setup.ts"
+  ]
+}

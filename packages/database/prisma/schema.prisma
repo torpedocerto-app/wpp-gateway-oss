@@ -1,0 +1,364 @@
+// Modelo de dados — doc 02.
+//
+// ⚠️ A tabela `messages` é particionada por mês (RANGE em created_at). O Prisma
+// não emite PARTITION BY: a migration inicial é editada à mão para adicionar o
+// particionamento e a função de criação automática de partições (doc 02 §3).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums (espelham @wpp/shared/enums.ts)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AccountStatus {
+  DISCONNECTED
+  QR_PENDING
+  CONNECTED
+  RECONNECTING
+  BANNED
+}
+
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELED
+}
+
+enum AttemptResult {
+  SUCCESS
+  FAILED
+}
+
+enum AccountEventType {
+  CONNECTED
+  DISCONNECTED
+  QR_GENERATED
+  BAN_DETECTED
+  RECONNECT_ATTEMPT
+  MANUALLY_DISABLED
+  LIMIT_REACHED
+  OPT_OUT
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// accounts — contas WhatsApp do pool (doc 02 §2.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Account {
+  id                  String        @id @default(uuid()) @db.Uuid
+  label               String
+  phoneNumber         String?       @map("phone_number")
+  status              AccountStatus @default(DISCONNECTED)
+  sessionPath         String        @map("session_path")
+  isEnabled           Boolean       @default(true) @map("is_enabled")
+  priority            Int           @default(0)
+  dailyLimit          Int           @default(300) @map("daily_limit")
+  hourlyLimit         Int           @default(40) @map("hourly_limit")
+  connectedAt         DateTime?     @map("connected_at") @db.Timestamptz(6)
+  lastSeenAt          DateTime?     @map("last_seen_at") @db.Timestamptz(6)
+  lastError           String?       @map("last_error")
+  consecutiveFailures Int           @default(0) @map("consecutive_failures")
+  bannedAt            DateTime?     @map("banned_at") @db.Timestamptz(6)
+  warmupUntil         DateTime?     @map("warmup_until") @db.Timestamptz(6)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  messages Message[]
+  attempts MessageAttempt[]
+  events   AccountEvent[]
+
+  @@index([status, isEnabled])
+  @@map("accounts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// projects — sistemas consumidores (doc 02 §2.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Project {
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String   @unique
+  webhookUrl         String?  @map("webhook_url")
+  webhookSecret      String?  @map("webhook_secret")
+  webhookEvents      String[] @map("webhook_events")
+  rateLimitPerMinute Int      @default(60) @map("rate_limit_per_minute")
+  dailyQuota         Int?     @map("daily_quota")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tokens            ApiToken[]
+  messages          Message[]
+  webhookDeliveries WebhookDelivery[]
+
+  @@map("projects")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// api_tokens — credenciais de acesso (doc 02 §2.3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ApiToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  name        String
+  tokenHash   String    @unique @map("token_hash")
+  tokenPrefix String    @map("token_prefix")
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(6)
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(6)
+  revokedAt   DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([projectId])
+  @@map("api_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// messages — registro central (doc 02 §2.4)
+//
+// ⚠️ PARTICIONADA POR MÊS. A PK precisa incluir a chave de partição (created_at),
+// por isso é composta. Ajuste aplicado na migration SQL manual.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Message {
+  id                String           @default(uuid()) @db.Uuid
+  projectId         String?          @map("project_id") @db.Uuid
+  apiTokenId        String?          @map("api_token_id") @db.Uuid
+  accountId         String?          @map("account_id") @db.Uuid
+  direction         MessageDirection
+  status            MessageStatus    @default(QUEUED)
+  toNumber          String           @map("to_number")
+  fromNumber        String?          @map("from_number")
+  content           String
+  // Metadata de mídia (imagem/PDF), quando a mensagem tem anexo — os BYTES
+  // nunca são persistidos aqui; trafegam só pelo payload do job (Redis) entre
+  // API e worker e são descartados depois do envio (doc 05 §9).
+  mediaMimeType     String?          @map("media_mime_type")
+  mediaFileName     String?          @map("media_file_name")
+  externalId        String?          @map("external_id")
+  whatsappMessageId String?          @map("whatsapp_message_id")
+  errorCode         String?          @map("error_code")
+  errorMessage      String?          @map("error_message")
+  attemptCount      Int              @default(0) @map("attempt_count")
+  scheduledFor      DateTime?        @map("scheduled_for") @db.Timestamptz(6)
+  queuedAt          DateTime?        @map("queued_at") @db.Timestamptz(6)
+  sentAt            DateTime?        @map("sent_at") @db.Timestamptz(6)
+  deliveredAt       DateTime?        @map("delivered_at") @db.Timestamptz(6)
+  readAt            DateTime?        @map("read_at") @db.Timestamptz(6)
+  failedAt          DateTime?        @map("failed_at") @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  project  Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  apiToken ApiToken? @relation(fields: [apiTokenId], references: [id], onDelete: SetNull)
+  account  Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  // Sem relação com MessageAttempt: a tabela particionada tem PK composta
+  // (id, created_at), o que impede uma FK simples. A ligação é por message_id
+  // e a integridade é garantida pela aplicação (worker).
+
+  // PK composta exigida pelo particionamento
+  @@id([id, createdAt])
+  @@index([projectId, createdAt(sort: Desc)])
+  @@index([accountId, createdAt(sort: Desc)])
+  @@index([toNumber, createdAt(sort: Desc)])
+  @@map("messages")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// message_attempts — histórico de tentativas (doc 02 §2.5)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MessageAttempt {
+  id            String        @id @default(uuid()) @db.Uuid
+  messageId     String        @map("message_id") @db.Uuid
+  accountId     String        @map("account_id") @db.Uuid
+  attemptNumber Int           @map("attempt_number")
+  result        AttemptResult
+  errorCode     String?       @map("error_code")
+  errorMessage  String?       @map("error_message")
+  durationMs    Int           @map("duration_ms")
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Sem FK relacional para Message: a tabela particionada tem PK composta.
+  // A integridade é garantida pela aplicação (worker).
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_attempts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// account_events — auditoria das contas (doc 02 §2.6)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AccountEvent {
+  id        String          @id @default(uuid()) @db.Uuid
+  accountId String          @map("account_id") @db.Uuid
+  type      AccountEventType
+  detail    Json            @default("{}")
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt(sort: Desc)])
+  @@map("account_events")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// suppressed_contacts — opt-out real (doc 06 §5, "Fase 8" concluída)
+//
+// Tenant-wide por número: o destinatário não sabe (nem deve precisar saber)
+// qual conta do pool compartilhado está mandando — "pare" vale para o tenant
+// inteiro, não só para a conta que originou o pedido. Populada em
+// apps/worker/src/sessions/inbound.ts ao detectar isOptOutRequest(text);
+// consultada antes de enfileirar (API) e antes de enviar (worker).
+// ─────────────────────────────────────────────────────────────────────────────
+
+model SuppressedContact {
+  id          String   @id @default(uuid()) @db.Uuid
+  phoneNumber String   @unique @map("phone_number")
+  reason      String   @default("opt_out_keyword")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("suppressed_contacts")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// webhook_deliveries (doc 02 §2.7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WebhookDelivery {
+  id           String                @id @default(uuid()) @db.Uuid
+  projectId    String                @map("project_id") @db.Uuid
+  messageId    String?               @map("message_id") @db.Uuid
+  eventType    String                @map("event_type")
+  payload      Json
+  status       WebhookDeliveryStatus  @default(PENDING)
+  httpStatus   Int?                  @map("http_status")
+  attemptCount Int                   @default(0) @map("attempt_count")
+  nextRetryAt  DateTime?             @map("next_retry_at") @db.Timestamptz(6)
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  deliveredAt  DateTime?             @map("delivered_at") @db.Timestamptz(6)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([projectId, createdAt(sort: Desc)])
+  @@map("webhook_deliveries")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// daily_stats — agregado para retenção longa (doc 02 §2.8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model DailyStats {
+  id             String   @id @default(uuid()) @db.Uuid
+  date           DateTime @db.Date
+  projectId      String?  @map("project_id") @db.Uuid
+  accountId      String?  @map("account_id") @db.Uuid
+  sentCount      Int      @default(0) @map("sent_count")
+  deliveredCount Int      @default(0) @map("delivered_count")
+  readCount      Int      @default(0) @map("read_count")
+  failedCount    Int      @default(0) @map("failed_count")
+  receivedCount  Int      @default(0) @map("received_count")
+  errorBreakdown Json     @default("{}") @map("error_breakdown")
+
+  @@unique([date, projectId, accountId])
+  @@map("daily_stats")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// admin_users — acesso ao painel (doc 02 §2.9)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String?
+  // 'SETUP_PENDING' = usuário criado (seed / convite / admin-create.sh) mas ainda
+  // sem senha. O fluxo /login/setup troca por um hash Argon2id de verdade.
+  passwordHash String    @map("password_hash")
+  totpSecret   String?   @map("totp_secret")
+  totpEnabled  Boolean   @default(false) @map("totp_enabled")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  // Desativa sem apagar (espelha revokedAt do ApiToken). requireSession recusa
+  // sessão de usuário com disabledAt != null.
+  disabledAt   DateTime? @map("disabled_at") @db.Timestamptz(6)
+  invitedById  String?   @map("invited_by_id") @db.Uuid
+  // Idioma do painel/e-mails deste usuário: 'pt' | 'es' | 'en' (validado no app).
+  locale       String    @default("pt") @db.VarChar(5)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  invitedBy AdminUser?   @relation("AdminInvites", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitees  AdminUser[]  @relation("AdminInvites")
+  tokens    AdminToken[]
+
+  @@map("admin_users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// admin_tokens — tokens de uso único do painel: recuperação de senha (RESET) e
+// convite de novo usuário (INVITE). Guarda só o sha256 do token, nunca o valor
+// cru (mesmo padrão de api_tokens).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AdminTokenPurpose {
+  RESET
+  INVITE
+}
+
+model AdminToken {
+  id        String            @id @default(uuid()) @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  purpose   AdminTokenPurpose
+  tokenHash String            @unique @map("token_hash")
+  expiresAt DateTime          @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime?         @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("admin_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// settings — configuração chave-valor editável em runtime (Fase 5)
+//
+// Ex.: alert_whatsapp_number, alert_email_override, quiet_hours_start.
+// Sobrescreve os defaults do .env quando presente. Editada via CLI/painel.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("settings")
+}

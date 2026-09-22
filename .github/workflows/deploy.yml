@@ -1,0 +1,162 @@
+# CI/CD — build ARM64 → push ECR → deploy na EC2 via SSM.
+#
+# Autenticação AWS: OIDC (sem chaves de acesso). O role só confia neste repo.
+# Segredos/vars necessários no repo (Settings → Secrets and variables → Actions):
+#   vars.AWS_ACCOUNT_ID        123456789012   (por deploy/conta)
+#   vars.AWS_REGION            us-east-1
+#   vars.DEPLOY_ROLE_ARN       arn:aws:iam::<acct>:role/wpp-gateway-gha-deploy
+#   vars.ECR_REPOSITORY        wpp-gateway
+#   vars.EC2_INSTANCE_ID       i-xxxxxxxx     (alvo do SSM)
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # OIDC
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: wpp
+          POSTGRES_USER: wpp
+          POSTGRES_PASSWORD: wpp
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U wpp -d wpp"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # .env mínimo para os testes de contrato (NODE_ENV=test isola as filas).
+      NODE_ENV: test
+      DATABASE_URL: postgresql://wpp:wpp@localhost:5432/wpp?schema=public
+      REDIS_URL: redis://localhost:6379
+      ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      SESSION_SECRET: "1111111111111111111111111111111111111111111111111111111111111111"
+      ALERT_WHATSAPP_NUMBER: "573001234567"
+      ALERT_EMAIL: ci@example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.10.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @wpp/database exec prisma generate
+      - run: pnpm --filter @wpp/database exec prisma migrate deploy
+      - run: pnpm exec turbo run build --filter='!@wpp/panel'
+      - run: pnpm exec vitest run
+      - run: node scripts/check-messages.mjs
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:latest
+          cache-from: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:buildcache
+          cache-to: type=registry,ref=${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:buildcache,mode=max
+
+      # Empacota só a orquestração (a app já está na imagem do ECR) e manda
+      # via SSM. A EC2 não tem git nem credenciais do repo.
+      - name: Pack deploy files
+        run: |
+          tar -czf deploy-bundle.tar.gz docker/ scripts/
+          echo "bundle: $(wc -c < deploy-bundle.tar.gz) bytes"
+
+      - name: Deploy via SSM Run Command
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          B64=$(base64 -w0 deploy-bundle.tar.gz)
+
+          # monta o payload com jq — nada de interpolar blob gigante em string
+          jq -n --arg b64 "$B64" --arg sha "$SHA" '{
+            commands: [
+              "set -euo pipefail",
+              "mkdir -p /opt/wpp-gateway && cd /opt/wpp-gateway",
+              ("echo " + $b64 + " | base64 -d > /tmp/deploy-bundle.tar.gz"),
+              "rm -rf docker scripts",
+              "tar -xzf /tmp/deploy-bundle.tar.gz -C /opt/wpp-gateway",
+              "chown -R ec2-user:ec2-user /opt/wpp-gateway/docker /opt/wpp-gateway/scripts",
+              "chmod +x /opt/wpp-gateway/scripts/*.sh",
+              ("sudo -u ec2-user bash /opt/wpp-gateway/scripts/deploy-all.sh " + $sha)
+            ]
+          }' > ssm-params.json
+
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "deploy $SHA" \
+            --parameters file://ssm-params.json \
+            --timeout-seconds 900 \
+            --query "Command.CommandId" --output text)
+          echo "SSM CommandId: $CMD_ID"
+
+          for i in $(seq 1 80); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \
+              --query "Status" --output text 2>/dev/null || echo "Pending")
+            echo "[$i] status=$STATUS"
+            case "$STATUS" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut)
+                echo "::group::STDERR"
+                aws ssm get-command-invocation --command-id "$CMD_ID" \
+                  --instance-id "$INSTANCE_ID" --query "StandardErrorContent" --output text
+                echo "::endgroup::"
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+
+          echo "::group::STDOUT"
+          aws ssm get-command-invocation --command-id "$CMD_ID" \
+            --instance-id "$INSTANCE_ID" --query "StandardOutputContent" --output text
+          echo "::endgroup::"

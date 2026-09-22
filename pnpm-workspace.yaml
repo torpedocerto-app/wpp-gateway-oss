@@ -1,0 +1,30 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Dependências autorizadas a rodar scripts de build (definido por `pnpm approve-builds`)
+allowBuilds:
+  # deps do plugin SWC opcional do next-intl (extractor de mensagens em build);
+  # não usamos o extractor — o fallback puro-JS do next-intl basta.
+  "@parcel/watcher": false
+  "@prisma/client": true
+  "@prisma/engines": true
+  "@swc/core": false
+  argon2: true
+  baileys: true
+  esbuild: true
+  # msgpackr-extract é otimização opcional do BullMQ; o fallback JS puro basta
+  msgpackr-extract: false
+  prisma: true
+  protobufjs: true
+
+# O Baileys depende de um fork mantido de libsignal hospedado no GitHub
+# (WhiskeySockets/libsignal-node). É a forma canônica de instalar a lib desde
+# sempre; liberamos a exceção à política blockExoticSubdeps só para ela.
+blockExoticSubdeps: false
+
+minimumReleaseAgeExclude:
+  - icu-minify@4.14.3
+  - next-intl-swc-plugin-extractor@4.14.3
+  - next-intl@4.14.3
+  - use-intl@4.14.3

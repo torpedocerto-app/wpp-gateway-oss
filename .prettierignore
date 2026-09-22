@@ -1,0 +1,9 @@
+node_modules
+dist
+.next
+coverage
+pnpm-lock.yaml
+packages/database/prisma/migrations
+
+# Docs têm ASCII art, diagramas e tabelas alinhadas à mão — Prettier quebra o alinhamento
+docs

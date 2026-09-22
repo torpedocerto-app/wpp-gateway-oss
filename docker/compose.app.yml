@@ -1,0 +1,112 @@
+# Stack de UM tenant (projeto white-label). NÃO inclui Caddy — o proxy é um
+# serviço à parte (compose.caddy.yml), único na EC2, roteando por domínio.
+#
+# Isolamento entre tenants vem do project name: o deploy roda
+#   docker compose -p wpp-<tenant> -f compose.app.yml ...
+# então containers, rede e volumes ganham o prefixo wpp-<tenant>_ e NADA é
+# compartilhado entre tenants (nem Postgres, nem Redis, nem sessões WhatsApp).
+#
+# ⚠️ worker: replicas SEMPRE 1 (ADR-002 — sessões Baileys não podem duplicar).
+#
+# Variáveis obrigatórias (vêm do .env do tenant, montado pelo deploy):
+#   ECR_IMAGE, TENANT, TENANT_ENV_FILE, POSTGRES_PASSWORD, REDIS_PASSWORD
+
+x-app-image: &app-image
+  image: ${ECR_IMAGE:?set ECR_IMAGE}
+  restart: unless-stopped
+  env_file: ${TENANT_ENV_FILE:?set TENANT_ENV_FILE}
+  logging: &logging
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wpp
+      POSTGRES_USER: wpp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in tenant .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # ⚠️ SEM ports: — só a rede interna deste tenant
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wpp -d wpp"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?set in tenant .env}
+    volumes:
+      - redisdata:/data
+    # ⚠️ SEM ports:
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *logging
+
+  # roda migrations e sai
+  migrate:
+    image: ${ECR_IMAGE:?set ECR_IMAGE}
+    env_file: ${TENANT_ENV_FILE:?set TENANT_ENV_FILE}
+    entrypoint: ["dumb-init", "--", "sh", "-lc", "pnpm --filter @wpp/database exec prisma migrate deploy"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    logging: *logging
+
+  api:
+    <<: *app-image
+    command: ["node", "apps/api/dist/main.js"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      migrate: { condition: service_completed_successfully }
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  worker:
+    <<: *app-image
+    command: ["node", "apps/worker/dist/main.js"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      migrate: { condition: service_completed_successfully }
+    # ⚠️ NUNCA escalar — sessões Baileys são stateful e únicas por conta
+    deploy:
+      replicas: 1
+    volumes:
+      - sessions:/data/sessions # bate com SESSIONS_PATH (default /data/sessions)
+    expose: ["3002"]
+
+  panel:
+    <<: *app-image
+    command: ["sh", "-lc", "pnpm --filter @wpp/panel exec next start -p 3001 -H 0.0.0.0"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    expose: ["3001"]
+
+# A rede default deste projeto ganha um nome fixo e previsível
+# (wpp-<tenant>_net) para o Caddy poder se conectar a ela por nome.
+networks:
+  default:
+    name: wpp-${TENANT:?set TENANT}_net
+
+volumes:
+  pgdata:
+  redisdata:
+  sessions: # 🔴 CRÍTICO — perder = reescanear todos os QRs deste tenant

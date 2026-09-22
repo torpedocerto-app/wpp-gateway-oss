@@ -1,0 +1,30 @@
+# nunca mandar deps/artefatos locais para o build — a imagem instala do zero
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/coverage
+# tsc -b usa isto p/ build incremental; se vier do host, tsc acha que já
+# está tudo compilado e NÃO emite dist/ dentro da imagem.
+**/*.tsbuildinfo
+
+# segredos e estado local
+.env
+.env.*
+!.env.example
+data/
+apps/*/data/
+
+# git e tooling
+.git
+.github
+.vscode
+.idea
+*.log
+
+# docs e infra que não afetam o build da app
+docs/
+scripts/
+docker/docker-compose*.yml
+docker/Caddyfile
+README.md

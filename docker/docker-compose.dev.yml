@@ -1,0 +1,42 @@
+# Infraestrutura local de desenvolvimento — apenas Postgres e Redis.
+# API, worker e painel rodam via `pnpm dev` na máquina, não em container.
+#
+# Produção usa docker/docker-compose.yml (doc 09 §4) — arquivo separado.
+
+name: wpp-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wpp
+      POSTGRES_USER: wpp
+      POSTGRES_PASSWORD: wpp_dev
+    ports:
+      - '5432:5432' # exposto localmente — só em dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wpp -d wpp']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - '6379:6379' # exposto localmente — só em dev
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:
