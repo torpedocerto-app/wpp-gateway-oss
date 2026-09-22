@@ -334,6 +334,36 @@ This project exists for low-volume cases where that path isn't worth the cost
 and overhead — and it treats bans as a statistical certainty rather than a
 remote risk.
 
+### Your responsibility as an operator
+
+**You are the data controller for everything you send through this gateway.**
+This software moves messages; it does not give you the right to send them.
+
+If you deploy it, it is on you to:
+
+- **Have a lawful basis for contacting each recipient.** Under GDPR, Brazil's
+  LGPD and equivalent regimes, a phone number is personal data. Messages someone
+  asked for — a code they requested, an order they placed — normally rest on
+  performing a contract. A list you bought does not rest on anything.
+- **Honour opt-outs, and honour them everywhere.** The gateway enforces
+  suppression on its own sends; it can't know about a request someone made to
+  you by another channel.
+- **Tell people how you'll reach them,** in whatever privacy notice covers the
+  service they signed up for.
+- **Keep what you collect to what you need.** Note that automatic deletion is
+  **not implemented yet** — `RETENTION_DAYS` (default 90) is read and validated,
+  but no job acts on it, so message history accumulates until you prune it
+  yourself. The intended policy is in
+  [`docs/02-modelo-de-dados.md`](docs/02-modelo-de-dados.md) §3.
+- **Comply with the local rules** wherever your recipients are — messaging,
+  consent and marketing law vary by country, and the recipient's country is the
+  one that counts.
+
+The defaults here are conservative and the opt-out is real, but no software
+setting makes an unlawful send lawful. The project is offered as-is, with no
+warranty (see [LICENSE](LICENSE)); the legal consequences of what you send are
+yours, not the author's.
+
 ---
 
 ## Documentation
