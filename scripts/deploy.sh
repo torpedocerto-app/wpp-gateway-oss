@@ -58,7 +58,7 @@ fi
 mv "${ENV_FILE}.tmp" "${ENV_FILE}"
 # POSTGRES_PASSWORD / REDIS_PASSWORD precisam existir no SHELL para a
 # interpolação do compose.app.yml. NÃO fazer `. ${ENV_FILE}` — valores como
-# PANEL_BRAND_NAME="Alto Paraná Energia" (com espaço) quebram o source.
+# PANEL_BRAND_NAME="Acme Energy Ltd" (com espaço) quebram o source.
 # Extrai só o que o compose interpola:
 export POSTGRES_PASSWORD="$(sed -n 's/^POSTGRES_PASSWORD=//p' "${ENV_FILE}")"
 export REDIS_PASSWORD="$(sed -n 's/^REDIS_PASSWORD=//p' "${ENV_FILE}")"

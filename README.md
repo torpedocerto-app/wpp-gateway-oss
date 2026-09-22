@@ -1,255 +1,329 @@
 # wpp-gateway
 
-Gateway de mensageria WhatsApp multi-conta: uma API HTTP única para os sistemas
-de uma organização enviarem e receberem mensagens, com pool de contas,
-fila assíncrona, fallback automático e painel administrativo.
+A self-hosted WhatsApp notification gateway. One HTTP API that any number of
+your systems can call to send messages, backed by a pool of WhatsApp accounts
+with automatic rotation, queueing and failover.
 
-White-label por design — o código não referencia marca alguma. Cada deploy é uma
-instância independente configurada por variáveis de ambiente.
+Built because I needed my systems to notify me on a channel I actually check.
 
-> ⚠️ **Uso responsável.** Este projeto é para mensagens **transacionais
-> solicitadas pelo destinatário** — alertas, confirmações, OTP, avisos de status.
-> Não é ferramenta de marketing em massa e não deve ser usada para isso. Ver
-> [Ética e limites de uso](#ética-e-limites-de-uso).
+> ⚠️ **Intended use:** transactional messages the recipient asked for or expects
+> — OTPs, sign-up confirmations, system alerts, status updates. This is not a
+> bulk marketing tool. See [Responsible use](#responsible-use).
+
+<!-- SCREENSHOT: dashboard — see docs/SCREENSHOTS.md for the suggested shots -->
 
 ---
 
-## O problema
+## Why this exists
 
-Uma organização com vários sistemas (CRM, e-commerce, agendamento, ERP) acaba
-integrando WhatsApp N vezes — N implementações, N pontos de falha, N lugares
-para descobrir que as mensagens pararam de sair.
+I run several systems and I wanted all of them to notify me about things:
+someone signed up on my site, an OTP, an alert. Email I get to eventually.
+WhatsApp I have open all day.
 
-Pior: automação de WhatsApp via WhatsApp Web depende de contas reais que **podem
-ser banidas a qualquer momento**. Uma integração ingênua descobre isso quando o
-cliente reclama que nunca recebeu a confirmação.
+The obvious answer is the official WhatsApp Business API. I looked at it. But
+between creating the account, going through approval, activating it, getting
+every message template reviewed and paying per conversation, the cost and the
+bureaucracy didn't justify themselves for my volume.
 
-## A solução
+So I took the pragmatic path: WhatsApp Web, through
+[Baileys](https://github.com/WhiskeySockets/Baileys). Simpler, cheap, solves my
+problem.
+
+**That path has exactly one real drawback: channels go down.** If Meta flags an
+account for spam or misuse, it's gone — no warning, no appeal.
+
+That's why the platform takes multiple channels from the start, and why most of
+the engineering here goes into rotation, delays and queueing — keeping accounts
+off that list, and keeping messages flowing when one of them does drop.
+
+I'm clear-eyed about the trade-off: if a channel goes down, so be it. I buy
+another SIM and move on. The architecture exists so that a channel dropping is
+an inconvenience, not an outage.
+
+---
+
+## How it works
 
 ```
 ┌──────────┐  ┌──────────┐  ┌──────────┐
-│ Sistema A│  │ Sistema B│  │ Sistema C│
+│ System A │  │ System B │  │ System C │
 └────┬─────┘  └────┬─────┘  └────┬─────┘
      │ token A     │ token B     │ token C
      └─────────────┼─────────────┘
                    ▼
        ┌───────────────────────┐
-       │   API HTTP (Fastify)  │  valida, autentica, enfileira
+       │   HTTP API (Fastify)  │  auth, validation, rate limit
        └───────────┬───────────┘
                    ▼
        ┌───────────────────────┐
-       │   Fila (BullMQ/Redis) │  retry, backoff, prioridade
+       │  Queue (BullMQ/Redis) │  retry, backoff, priority
        └───────────┬───────────┘
                    ▼
        ┌───────────────────────┐
-       │  Worker (Baileys)     │  sorteio de conta + anti-ban
+       │   Worker (Baileys)    │  channel rotation + pacing
        └───────────┬───────────┘
       ┌────────┬───┴────┬────────┐
       ▼        ▼        ▼        ▼
-   Conta 1  Conta 2  Conta 3  Conta N   ← pool de contas WhatsApp
+  Channel 1 Channel 2 Channel 3 Channel N
       └────────┴────────┴────────┘
                    ▼
-            Destinatários
+              Recipients
 ```
 
-O envio é **assíncrono por decisão de arquitetura**: o HTTP responde assim que a
-mensagem entra na fila. Isso desacopla a latência (e a instabilidade) do
-WhatsApp Web do tempo de resposta dos sistemas que consomem a API, e permite
-retry com fallback para outra conta sem que o chamador saiba.
+Sending is **asynchronous by design**. The HTTP call returns as soon as the
+message is queued, not when WhatsApp delivers it. That keeps WhatsApp Web's
+latency and flakiness out of your callers' response times, and it's what makes
+retrying on a different channel possible without the caller ever knowing.
 
 ---
 
-## Destaques técnicos
+## Features
 
-**Resiliência como requisito, não como feature.** A premissa do projeto é que
-contas *vão* cair. O que importa é o que acontece depois:
+### Keeping channels alive
 
-- **Fallback entre contas** — falha de envio reenfileira com prioridade e conta
-  diferente, em vez de descartar a mensagem
-- **Classificação de desconexão** — distinguir ban real (401/403) de erro de
-  stream transitório evita marcar como banida uma conta que só precisa
-  reconectar. Essa diferença custou depuração para descobrir
-- **Detecção ativa + alerta** — falha silenciosa é o pior cenário; contas
-  offline geram alerta por WhatsApp e e-mail
+| Feature | What it does |
+|---|---|
+| **Channel rotation** | Each send picks randomly from the available pool instead of hammering one account |
+| **Randomized delay** | ±30% jitter between sends — regular cadence is what gives automation away |
+| **Warmup** | New accounts start with reduced limits for 7 days |
+| **Quiet hours** | Nothing goes out between 23:00–06:00 (configurable, in the tenant's timezone) |
+| **Hourly/daily caps** | Conservative per-account limits, enforced per channel |
+| **Typing indicator** | Sends `composing` before each message |
+| **Number validation** | Checks the number exists on WhatsApp before sending, with caching |
+| **Real opt-out** | Blocks further sends to a contact, not just logs the request |
 
-**Anti-ban conservador**, derivado de como a automação é detectada:
-warmup obrigatório de 7 dias para contas novas, delay com jitter de ±30%,
-indicador de digitação antes de cada envio, janela de silêncio 23h–06h,
-limites por hora/dia e verificação prévia de número existente.
-([documentado em `docs/06-anti-ban.md`](docs/06-anti-ban.md))
+### When a channel drops anyway
 
-**Multi-tenant em produção.** Uma EC2 (t4g.medium ARM + Docker Compose) roda N
-deploys totalmente isolados — volumes, rede, namespace no SSM e banco separados
-por tenant — com um Caddy na frente roteando por domínio e TLS automático.
-Deploy via GitHub Actions + SSM aplica a mesma imagem a todos os tenants.
+| Feature | What it does |
+|---|---|
+| **Queue failover** | A failed send re-queues on a *different* channel instead of being lost |
+| **Disconnect classification** | Tells a real ban (401/403) apart from a transient stream error — retiring a healthy account that just needed to reconnect drains the pool for nothing |
+| **Active detection + alerts** | Offline channels trigger a WhatsApp and email alert. Silent failure is the worst outcome: messages vanish and nobody knows |
+| **Session persistence** | WhatsApp sessions survive restarts and redeploys — no re-scanning QR codes |
 
-**Timezone por tenant.** Janela de silêncio, limite diário e o "hoje" do
-dashboard respeitam o fuso do tenant, não o do servidor — um deploy na Colômbia
-e outro no Brasil não compartilham a mesma meia-noite.
+### Operations
 
-**Testes que não podem disparar envio real.** Três camadas independentes: fila
-com sufixo `-test`, guard no worker e mock do enfileiramento. Um teste que
-mande mensagem para um número real é um incidente, não um teste que falhou.
+| Feature | What it does |
+|---|---|
+| **Per-project tokens** | Each consuming system gets its own token, quota and rate limit |
+| **Inbound capture** | Replies are captured and delivered via webhook, enabling two-way flows |
+| **Media** | Images and PDFs, not just text |
+| **Admin panel** | QR pairing, usage dashboards, message history, quota management |
+| **2FA** | Argon2 + TOTP on panel login |
+| **Multi-tenant** | Fully isolated deploys on one host, routed by domain |
+| **i18n** | Panel available in English, Portuguese and Spanish |
+| **Per-tenant timezone** | Quiet hours, daily caps and dashboard "today" follow the tenant's timezone, not the server's |
 
 ---
 
 ## Stack
 
-| Camada | Escolha |
+| Layer | Choice |
 |---|---|
-| Linguagem | TypeScript (Node 22, ESM) |
+| Language | TypeScript (Node 22, ESM) |
 | Monorepo | pnpm workspaces + Turborepo |
 | API | Fastify 5 + Zod |
-| Fila | BullMQ + Redis 7 |
-| WhatsApp | Baileys 6.7 (WhatsApp Web, não-oficial) |
-| Banco | PostgreSQL 16 + Prisma 6 |
-| Painel | Next.js 15 + React 19 + Tailwind |
-| Auth do painel | Argon2 + TOTP (2FA) |
-| Observabilidade | Pino + CloudWatch |
-| Infra | AWS EC2 ARM, Docker Compose, Caddy, S3 |
-| Testes | Vitest (29 suítes) |
+| Queue | BullMQ + Redis 7 |
+| WhatsApp | Baileys 6.7 (WhatsApp Web, unofficial) |
+| Database | PostgreSQL 16 + Prisma 6 |
+| Panel | Next.js 15 + React 19 + Tailwind |
+| Panel auth | Argon2 + TOTP |
+| Logging | Pino + CloudWatch |
+| Infra | AWS EC2 (ARM), Docker Compose, Caddy, S3 |
+| Tests | Vitest (29 suites) |
 
-~15 mil linhas de TypeScript entre `apps/` e `packages/`.
+Around 15k lines of TypeScript across `apps/` and `packages/`.
+
+```
+apps/
+  api/        public HTTP API (Fastify)
+  worker/     queue consumer + WhatsApp sessions (Baileys)
+  panel/      admin panel (Next.js)
+packages/
+  config/     env vars validated with Zod
+  database/   Prisma schema + migrations
+  queue/      queue abstraction (BullMQ)
+  shared/     shared types and utilities
+  email/      transactional email
+docker/       dev and production compose files
+scripts/      deploy, backup, administration
+docs/         architecture documentation
+```
 
 ---
 
 ## API
 
-Autenticação por token de projeto (`Authorization: Bearer <token>`), o que
-permite rastrear consumo e aplicar cota por sistema consumidor.
+Authenticate with a per-project token: `Authorization: Bearer <token>`.
 
 ```http
-POST /v1/messages          envia uma mensagem
-POST /v1/messages/bulk     envia em lote
-POST /v1/messages/media    envia imagem ou PDF
-GET  /v1/messages          consulta status e histórico
-POST /v1/webhook/test      testa o webhook de callback
-GET  /v1/health            healthcheck (sem auth)
+POST /v1/messages          send a message
+POST /v1/messages/bulk     send a batch
+POST /v1/messages/media    send an image or PDF
+GET  /v1/messages          query status and history
+POST /v1/webhook/test      test your webhook endpoint
+GET  /v1/health            health check (no auth)
 ```
 
-Rate limiting por projeto, resolvido em Redis a partir do token autenticado —
-cada sistema consumidor tem seu próprio limite.
-
 ```bash
-curl -X POST https://seu-dominio/v1/messages \
+curl -X POST https://your-domain/v1/messages \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"to":"5511999998888","text":"Seu pedido #123 saiu para entrega."}'
+  -d '{"to":"5511999998888","text":"Your code is 123456"}'
 ```
 
-Respostas dos destinatários são capturadas e entregues por webhook, permitindo
-fluxos bidirecionais. Documentação completa em
-[`docs/03-api-publica.md`](docs/03-api-publica.md) e numa página pública em
-`/docs/api`.
+The response returns immediately with a message ID; delivery status is available
+via `GET /v1/messages` or pushed to your webhook. Incoming replies are delivered
+to the same webhook.
+
+A live API reference is served at `/docs/api` on every deploy.
 
 ---
 
-## Painel administrativo
+## Admin panel
 
-Next.js com i18n em português, inglês e espanhol:
+<!-- SCREENSHOT: channels list — connected / warmup / disconnected -->
+<!-- SCREENSHOT: QR pairing -->
+<!-- SCREENSHOT: message history -->
+<!-- SCREENSHOT: queue -->
 
-- Pareamento de contas por QR code e acompanhamento de status
-- Dashboard de consumo por projeto e por conta
-- Gestão de tokens, cotas e limites
-- Histórico de mensagens e conversas
-- Gestão de opt-out
-- Login com 2FA obrigatório
+Available in English, Portuguese and Spanish:
 
----
-
-## Ética e limites de uso
-
-Automação de WhatsApp é território sensível, e vale ser explícito sobre isso.
-
-**Para o que este projeto foi feito:** mensagens transacionais que o
-destinatário pediu ou espera — confirmação de pedido, código de verificação,
-alerta de sistema, aviso de agendamento.
-
-**Para o que não foi:** disparo em massa para listas compradas, marketing não
-solicitado, qualquer coisa que o destinatário não pediu.
-
-Isso não é só uma questão ética — é a restrição técnica que mais define a
-arquitetura. O sinal que mais bane contas não é volume, é **denúncia de
-usuário**. Nenhum delay aleatório compensa mensagem indesejada: um punhado de
-"Bloquear e denunciar" derruba uma conta mais rápido que qualquer heurística.
-Por isso o sistema implementa opt-out real (bloqueia reenvio, não só registra),
-janela de silêncio e limites conservadores.
-
-**Sobre os Termos de Serviço:** o uso de bibliotecas não-oficiais como a Baileys
-viola os ToS do WhatsApp, e a Meta pode banir qualquer conta sem aviso nem
-recurso. Para uso comercial em escala, o caminho correto é a
-[API oficial do WhatsApp Business](https://business.whatsapp.com/products/business-platform).
-Este projeto existe como solução para cenários de baixo volume onde a API
-oficial é inviável — e trata o banimento como certeza estatística, não como
-risco remoto.
+- **Channels** — pair accounts by QR code, monitor status, warmup progress
+- **Dashboard** — usage per project and per channel
+- **Projects** — tokens, quotas, rate limits
+- **Messages** — full history, delivery status, conversation view
+- **Queue** — what's pending, what failed, what's retrying
+- **Opt-out** — manage blocked contacts
+- **Alerts** — configure where channel-down notifications go
+- **Users** — panel access with mandatory 2FA
 
 ---
 
-## Rodando localmente
+## Quick start
 
-Pré-requisitos: Node 22+, pnpm 11+, Docker.
+Requirements: Node 22+, pnpm 11+, Docker.
 
 ```bash
+git clone <this-repo> && cd wpp-gateway
 pnpm install
-cp .env.example .env    # gere as chaves: openssl rand -hex 32
-pnpm infra:up           # Postgres 16 + Redis 7
-pnpm db:deploy          # migrations
-pnpm db:seed            # admin + projeto + token de dev
-pnpm dev
+cp .env.example .env
 ```
 
-| Comando | O quê |
+Generate the three secrets and put them in `.env`:
+
+```bash
+openssl rand -hex 32   # ENCRYPTION_KEY
+openssl rand -hex 32   # SESSION_SECRET
+openssl rand -hex 32   # PANEL_SESSION_SECRET
+openssl rand -hex 32   # INTERNAL_API_TOKEN
+```
+
+Then:
+
+```bash
+pnpm infra:up      # PostgreSQL 16 + Redis 7 in Docker
+pnpm db:deploy     # run migrations
+pnpm db:seed       # create admin user + sample project token
+pnpm dev           # api :3000 · panel :3001 · worker
+```
+
+Open http://localhost:3001, complete the admin setup (password + 2FA), then add
+your first channel and pair it by scanning the QR code with the WhatsApp account
+you want to send from.
+
+| Command | What it does |
 |---|---|
-| `pnpm infra:up` / `infra:down` | sobe/derruba Postgres e Redis |
-| `pnpm db:migrate` | cria migration (dev) |
-| `pnpm db:studio` | abre o Prisma Studio |
-| `pnpm test:all` | roda todos os testes |
-| `pnpm build` | build de todos os packages |
-| `pnpm lint` / `pnpm format` | lint e formatação |
+| `pnpm infra:up` / `infra:down` | start/stop PostgreSQL and Redis |
+| `pnpm db:migrate` | create a migration (dev) |
+| `pnpm db:studio` | open Prisma Studio |
+| `pnpm test:all` | run all tests |
+| `pnpm build` | build all packages |
+| `pnpm lint` / `pnpm format` | lint and format |
+
+**Production deployment:** see **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full
+guide — single host, multi-tenant, AWS with CI/CD, backups and TLS.
 
 ---
 
-## Estrutura
+## Configuration
 
-```
-apps/
-  api/        API HTTP pública (Fastify)
-  worker/     consumidor da fila + sessões WhatsApp (Baileys)
-  panel/      painel administrativo (Next.js)
-packages/
-  config/     env vars validadas com Zod
-  database/   schema Prisma + migrations
-  queue/      abstração da fila (BullMQ)
-  shared/     tipos e utilitários comuns
-  email/      envio de e-mail transacional
-docker/       compose de dev e produção
-scripts/      deploy, backup, administração
-docs/         documentação de arquitetura (00 a 12)
-```
+All configuration is environment variables, validated with Zod at startup — the
+service refuses to boot if something is missing or malformed. Full list in
+[`.env.example`](.env.example).
 
-## Documentação
+The ones that matter most:
 
-O projeto foi planejado antes de ser escrito. Os documentos em
-[`docs/`](docs/) registram as decisões:
-
-| Doc | Assunto |
+| Variable | What it controls |
 |---|---|
-| [00](docs/00-visao-geral.md) | visão geral e objetivos |
-| [01](docs/01-arquitetura.md) | arquitetura e componentes |
-| [02](docs/02-modelo-de-dados.md) | modelo de dados |
-| [03](docs/03-api-publica.md) | API pública |
-| [04](docs/04-gestao-de-contas.md) | ciclo de vida das contas |
-| [05](docs/05-fila-e-fallback.md) | fila, retry e fallback |
-| [06](docs/06-anti-ban.md) | estratégia anti-ban |
-| [07](docs/07-painel-admin.md) | painel administrativo |
-| [08](docs/08-seguranca-lgpd.md) | segurança e LGPD |
-| [09](docs/09-infraestrutura.md) | infraestrutura e deploy |
-| [10](docs/10-roadmap.md) | roadmap e histórico |
-| [11](docs/11-custos-aws.md) | custos de infraestrutura |
-| [12](docs/12-i18n.md) | internacionalização |
+| `ENCRYPTION_KEY` | Encrypts WhatsApp session credentials at rest |
+| `SESSION_SECRET` / `PANEL_SESSION_SECRET` | Session signing |
+| `INTERNAL_API_TOKEN` | Worker ↔ panel authentication (not a project token) |
+| `TENANT_TIMEZONE` | IANA name. Decides quiet hours, when daily caps reset, and the dashboard's "today". The server runs in UTC — without this, everything rolls over at UTC midnight |
+| `SILENT_HOURS_START` / `_END` | Quiet window, in the tenant's local hours |
+| `DEFAULT_DAILY_LIMIT` / `_HOURLY_LIMIT` | Per-channel caps |
+| `WARMUP_DAYS` | How long new channels stay throttled |
+| `ALERT_WHATSAPP_NUMBER` / `ALERT_EMAIL` | Where channel-down alerts go |
+| `PANEL_PUBLIC_URL` / `PANEL_BRAND_NAME` | White-label identity for this deploy |
+
+### White-label
+
+The code references no brand. Each deploy is an independent instance — its own
+domain, its own channel pool, its own database — configured entirely through
+`PANEL_PUBLIC_URL` and `PANEL_BRAND_NAME`.
 
 ---
 
-## Licença
+## Responsible use
 
-MIT — ver [LICENSE](LICENSE).
+WhatsApp automation is sensitive territory, so let me be explicit.
+
+**What this is for:** messages the recipient asked for or expects — a sign-up
+confirmation, a verification code, a system alert, a delivery update.
+
+**What it isn't for:** bulk sends to purchased lists, unsolicited marketing,
+anything nobody asked to receive.
+
+This isn't just a principled stance — it's the constraint that shapes the
+architecture. The strongest signal for getting an account banned isn't volume,
+it's **user reports**. No amount of randomized delay compensates for unwanted
+messages: a handful of "Block and report" taps kills an account faster than any
+volume heuristic. That's why opt-out actually blocks resends rather than merely
+logging the request, and why the default limits are deliberately conservative.
+
+**On Terms of Service:** using unofficial libraries like Baileys violates
+WhatsApp's ToS, and Meta can ban any account without notice or appeal. For
+commercial use at scale, the correct path is the
+[official WhatsApp Business Platform](https://business.whatsapp.com/products/business-platform).
+This project exists for low-volume cases where that path isn't worth the cost
+and overhead — and it treats bans as a statistical certainty rather than a
+remote risk.
+
+---
+
+## Documentation
+
+The project was designed before it was written. The documents in
+[`docs/`](docs/) record those decisions — **they are written in Portuguese**:
+
+| Doc | Topic |
+|---|---|
+| [00](docs/00-visao-geral.md) | overview and goals |
+| [01](docs/01-arquitetura.md) | architecture and components |
+| [02](docs/02-modelo-de-dados.md) | data model |
+| [03](docs/03-api-publica.md) | public API |
+| [04](docs/04-gestao-de-contas.md) | channel lifecycle |
+| [05](docs/05-fila-e-fallback.md) | queue, retry and failover |
+| [06](docs/06-anti-ban.md) | keeping channels alive |
+| [07](docs/07-painel-admin.md) | admin panel |
+| [08](docs/08-seguranca-lgpd.md) | security and data protection |
+| [09](docs/09-infraestrutura.md) | infrastructure and deploy |
+| [10](docs/10-roadmap.md) | roadmap and history |
+| [11](docs/11-custos-aws.md) | infrastructure costs |
+| [12](docs/12-i18n.md) | internationalization |
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
