@@ -177,6 +177,35 @@ credenciais de sessão · senhas. O logger deve ter **redaction configurada** pa
 
 ---
 
+## 7.1 Superfície pública e indexação
+
+Duas rotas respondem **sem sessão**: `/login` e `/docs/api` (documentação de
+integração, doc 03). É intencional — a doc existe para terceiros consumirem sem
+acesso ao painel.
+
+O risco não é vazamento (a página só tem exemplos fictícios), é **descoberta**:
+indexada, ela permite que uma busca liste todos os deploys deste gateway,
+expondo a infraestrutura de cada cliente.
+
+Por isso todo deploy bloqueia buscador, em duas camadas independentes:
+
+| Camada | Onde | O quê |
+|---|---|---|
+| Rastreio | `apps/panel/src/app/robots.ts` | `Disallow: /` para todo o deploy |
+| Indexação | `app/docs/layout.tsx` | `robots: { index: false, follow: false }` |
+
+> ⚠️ `/robots.txt` precisa ficar **fora** do matcher do middleware. Interceptado,
+> ele redirecionava para `/login` (307) e o crawler nunca via diretiva alguma.
+
+Verificação:
+
+```bash
+curl -s https://<dominio>/robots.txt              # User-Agent: * / Disallow: /
+curl -s https://<dominio>/docs/api | grep robots  # noindex, nofollow
+```
+
+---
+
 ## 8. Checklist pré-produção
 
 - [ ] TLS válido com renovação automática

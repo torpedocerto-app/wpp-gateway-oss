@@ -177,8 +177,10 @@ validar junto com o painel (Fase 6).
 `outbound`). O anti-SSRF é relaxado em test para permitir o receptor em 127.0.0.1;
 a lógica pura está 100% coberta em `ssrf.test.ts`.
 
-**Opt-out (doc 06 §5):** `isOptOutRequest` detecta PARAR/SAIR/STOP/etc no inbound e
-registra em `account_events`. A blocklist global que efetivamente bloqueia envio é Fase 8.
+**Opt-out (doc 06 §5):** ✅ implementado. `isOptOutRequest` detecta PARAR/SAIR/STOP/etc
+no inbound, grava em `suppressed_contacts` e `isSuppressed()` bloqueia o envio na API
+(texto, bulk, mídia) e de novo no worker, com erro `RECIPIENT_OPTED_OUT`. Há enum
+próprio `OPT_OUT` em `AccountEventType` e tela de gestão no painel.
 
 ---
 
@@ -205,7 +207,7 @@ configurado + segunda conta no pool — validar na Fase 7.
 
 **Reuso de enums:** `account_events.type` não tem valor `QUARANTINE`/`ALERT` ainda —
 o `AlertService` grava com `type: 'BAN_DETECTED'` e o tipo real vai no `detail.alert`.
-Fase 8 pode adicionar os enums dedicados.
+(`OPT_OUT` já ganhou enum próprio; `RETENTION_FAILED` existe como `AlertType`.)
 
 ---
 
