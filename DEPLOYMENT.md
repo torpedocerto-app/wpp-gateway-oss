@@ -159,6 +159,12 @@ curl -X POST https://wpp.your-domain.com/v1/messages \
   -d '{"to":"5511999998888","text":"Hello from wpp-gateway"}'
 ```
 
+Your deploy now serves its own integration reference at
+**`https://wpp.your-domain.com/docs/api`** — public, no login, in English,
+Portuguese and Spanish. Point whoever is writing the client at that URL rather
+than at this file: it's generated from the deploy itself, so it always matches
+the version actually running.
+
 ---
 
 ## Multi-tenant on AWS

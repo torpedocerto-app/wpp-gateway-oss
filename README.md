@@ -181,7 +181,29 @@ The response returns immediately with a message ID; delivery status is available
 via `GET /v1/messages` or pushed to your webhook. Incoming replies are delivered
 to the same webhook.
 
-A live API reference is served at `/docs/api` on every deploy.
+### Integration docs, served by the gateway itself
+
+![API documentation](docs/images/api-docs.png)
+
+Every deploy serves its own integration reference at **`/docs/api`** — public,
+no login, in English, Portuguese and Spanish. Fourteen sections covering
+authentication, each endpoint, webhooks, phone normalization, rate limiting,
+error codes and an integration checklist.
+
+It states the contract explicitly, so client authors don't have to infer it:
+
+- **Idempotency required** — every send accepts an `externalId`. Resending the
+  same one returns the original message with `200` instead of duplicating it,
+  which is what makes client retries and double-clicks safe.
+- **Always asynchronous** — a new send returns `202 Accepted`; the final status
+  arrives by webhook or query.
+- **Predictable errors** — every error carries a stable string code alongside the
+  HTTP status. Code against the code, never against the message text.
+- **Versioned in the URL** — `/v1`; breaking changes would create `/v2`.
+
+The page is also written to be pasted straight into an LLM's context to generate
+a client, which is why it spells out the full contract rather than assuming a
+human will fill in the gaps.
 
 ---
 
