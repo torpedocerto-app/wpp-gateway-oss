@@ -82,7 +82,7 @@ export default async function ApiDocsPage() {
         </h2>
         <div className="card">
           <p style={{ marginTop: 0 }}>{t('auth.p1')}</p>
-          <Code>{`Authorization: Bearer mk_live_9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c`}</Code>
+          <Code>{`Authorization: Bearer mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}</Code>
           <p>{t('auth.p2')}</p>
           <table>
             <thead>

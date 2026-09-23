@@ -29,7 +29,7 @@ Contrato consumido pelos projetos da holding.
 ## 2. Autenticação
 
 ```http
-Authorization: Bearer mk_live_9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c
+Authorization: Bearer mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 | Situação | HTTP | `code` |
